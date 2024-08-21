@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 
 import pandas as pd
 from mpi4py import MPI
-from utils.tools import save_var
 from pathlib import Path
 import logging
 
@@ -64,7 +63,7 @@ class SA(ABC):
         Perform a single step of the simulated annealing algorithm.
         This method should be overridden to implement the specific logic of a step.
         """
-        if self._verbose:
+        if self._verbose == 2:
             self._logger.info("=" * 46)
             self._logger.info(f"{'Iter':>6} | {'°C':>10} | {'Trial Loss':>10} | {'Best Loss':>10}")
             self._logger.info("=" * 46)
@@ -79,7 +78,7 @@ class SA(ABC):
                 if y_new < self.best_y:
                     self.best_x, self.best_y = copy.deepcopy(x_new), copy.deepcopy(y_new)
 
-            if i % 10 == 0 and self._verbose:
+            if i % 10 == 0 and self._verbose == 2:
                 self._logger.info(f"{i:>6d} | {self.T:>11f} | {self.y:>10.2f} | {self.best_y:>10.2f}")
 
     @abstractmethod
@@ -127,7 +126,7 @@ class PTSA(SA, ABC):
         """
 
     def step(self):
-        if self._verbose and self.rank == 1:
+        if self._verbose == 2 and self.rank == 0:
             self._logger.info("=" * 55)
             self._logger.info(f"{'Iter':>6} | {'°C':>10} | {'Trial Loss':>10} | {'Rank':>6} | {'Best Loss':>10}")
             self._logger.info("=" * 55)
@@ -143,7 +142,7 @@ class PTSA(SA, ABC):
                 if y_new < self.best_y:
                     self.best_x, self.best_y = copy.deepcopy(x_new), copy.deepcopy(y_new)
 
-            if i % 10 == 0 and self._verbose:
+            if i % 10 == 0 and self._verbose == 2:
                 self._logger.info(f"{i:>6d} | {self.T:>11f} | {self.y:>10.2f} | {self.rank:>6d} | {self.best_y:>10.2f}")
 
     def run(self):
@@ -177,14 +176,13 @@ class PTSA(SA, ABC):
 
                 index = np.argsort(T)
                 for i in range(SIZE - 1):
-                    x = index[i]
-                    y = index[i + 1]
+                    sol1 = index[i]
+                    sol2 = index[i + 1]
                     if np.random.random() > self.theta:
-                        accept_rate = np.exp(-fx[y] / T[x] - fx[x] / T[y] + fx[y] / T[y] + fx[x] / T[x])
-                        # self._logger.info("accept_rate: ", accept_rate)
+                        accept_rate = np.exp(-fx[sol2] / T[sol1] - fx[sol1] / T[sol2] + fx[sol2] / T[sol2] + fx[sol1] / T[sol1])
                         if accept_rate > np.random.random():
-                            T[x], T[y] = T[y], T[x]
-                            index[i], index[i + 1] = index[i + 1], index[i]
+                            T[sol1], T[sol2] = T[sol2], T[sol1]
+                            # index[i], index[i + 1] = index[i + 1], index[i]
                 data = T
             else:
                 data = None
@@ -213,3 +211,14 @@ class PTSA(SA, ABC):
                     info = [_.strip() for _ in line.split('|')]
                     df.loc[iter, f"Rank{i}"] = info[3]
         df.to_csv(outfile.name[:-4] + ".csv")
+
+
+
+def save_var(filename, action_trees_sa):
+    with open(filename, "wb") as f:
+        pk.dump(action_trees_sa, f)
+
+
+def load_var(filename):
+    with open(filename, "rb") as f:
+        return pk.load(f)
