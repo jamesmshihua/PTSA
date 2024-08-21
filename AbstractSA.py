@@ -9,27 +9,17 @@ from pathlib import Path
 import logging
 
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,  # Set the logging level
-    format='%(message)s',  # Log message format
-    handlers=[
-        logging.StreamHandler(),  # Print to terminal
-        logging.FileHandler('output.log')  # Print to file
-    ],
-    # filemode="w"
-)
-
-
 class SA(ABC):
     """
     Abstract base class for Simulated Annealing (SA) algorithm.
     """
 
-    def __init__(self, obj, x0, params, T_i, T_f, decay, reps, iters, verbose, output):
+    def __init__(self, task_name: str, obj, x0, params, T_i: float, T_f: float, decay: float, reps: int, iters: int,
+                 verbose: int, output: Path):
         """
         Initializes the simulated annealing algorithm with the given parameters.
         """
+        self.task_name = task_name
         self.obj = obj
         self.x0 = x0
         self.params = params
@@ -43,8 +33,20 @@ class SA(ABC):
         self._reps: int = reps
         self._iters: int = iters
         self._decay: float = decay
-        self._verbose: bool = verbose
+        self._verbose: int = verbose
         self._output: Path = output
+
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,  # Set the logging level
+            format='%(message)s',  # Log message format
+            handlers=[
+                logging.StreamHandler(),  # Print to terminal
+                logging.FileHandler(f"{self.task_name}_output.log")  # Print to file
+            ],
+            # filemode="w"
+        )
+
         self._logger = logging.getLogger()
 
     def __repr__(self):
@@ -106,9 +108,9 @@ class SA(ABC):
 
 
 class PTSA(SA, ABC):
-    def __init__(self, obj, x0, params, T_i: float, T_f: float, decay: float,
-                 reps: int, iters: int, verbose: bool, output: Path, theta: float):
-        super().__init__(obj, x0, params, T_i, T_f, decay, reps, iters, verbose, output)
+    def __init__(self, task_name: str, obj, x0, params, T_i: float, T_f: float, decay: float,
+                 reps: int, iters: int, verbose: int, output: Path, theta: float):
+        super().__init__(task_name, obj, x0, params, T_i, T_f, decay, reps, iters, verbose, output)
         self.theta = theta
         self.rank = 0
 
@@ -160,10 +162,16 @@ class PTSA(SA, ABC):
                 self._logger.info(f"{'Rank':>6} | {'Iter':>6} | {'°C':>10} | {'Loss':>10}")
                 self._logger.info("=" * 41)
                 best_rank = np.argmin(np.array([_[1] for _ in msg]))
-                for i in range(SIZE):
-                    marker = (i == best_rank) * " **"
-                    self._logger.info(f"{msg[i][2]:>6d} | {it + 1:>6d} | {msg[i][0]:>10.6f} | {msg[i][1]:>10.4f}{marker}")
-            # if RANK == 0:
+                if self._verbose == 1:
+                    for i in range(SIZE):
+                        marker = (i == best_rank) * " **"
+                        self._logger.info(f"{msg[i][2]:>6d} | {it + 1:>6d} | {msg[i][0]:>10.6f} | {msg[i][1]:>10.4f}{marker}")
+                elif self._verbose == 0:
+                    self._logger.info(
+                        f"{msg[best_rank][2]:>6d} | {it + 1:>6d} | {msg[best_rank][0]:>10.6f} | {msg[best_rank][1]:>10.4f}")
+                else:
+                    pass
+
                 T = [msg[i][0] for i in range(SIZE)]
                 fx = [msg[i][1] for i in range(SIZE)]
 
@@ -186,14 +194,14 @@ class PTSA(SA, ABC):
             self.cool_down()
 
             # break
-            save_name = self._output / ("rank_" + str(RANK) + "_best_actiontree.pkl")
+            save_name = self._output / f"rank_{self.rank}_{self.task_name}_best_x.pkl"
             save_var(save_name, self.best_x)
 
         return self.best_x, self.best_y
 
-    def process_output(self, SIZE: int, output: Path):
+    def process_output(self, SIZE: int):
         df = pd.DataFrame(columns=[f"Rank{i}" for i in range(SIZE)])
-        outfile = Path("output.log")
+        outfile = Path(f"{self.task_name}_output.log")
         iter = 0
         with open(outfile, 'r') as f:
             while f.readline():
@@ -204,4 +212,4 @@ class PTSA(SA, ABC):
                     line = f.readline()
                     info = [_.strip() for _ in line.split('|')]
                     df.loc[iter, f"Rank{i}"] = info[3]
-        df.to_csv(output)
+        df.to_csv(outfile.name[:-4] + ".csv")
