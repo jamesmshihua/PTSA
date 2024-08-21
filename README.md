@@ -16,3 +16,8 @@ The user only need to specify the trasition function.
 
 ## Usage
 See `example.py`
+
+verbose = {0, 1, 2}
+0: Print best x of PTSA per **outer** iteration
+1: Print best x of **every rank** per outer iteration
+2: Print best x per **inner** iteration (definitely not feasible for PTSA)
